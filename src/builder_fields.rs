@@ -1,5 +1,7 @@
+use proc_macro2::Span;
 use syn::{
-    spanned::Spanned, Attribute, Field, Fields, Ident, Lit, Meta, MetaNameValue, NestedMeta, Type,
+    spanned::Spanned, Attribute, Field, Fields, GenericArgument, Ident, Lit, Meta, MetaNameValue,
+    NestedMeta, Path, PathArguments, Type, TypePath,
 };
 
 const ITERATIVE_IDENT_ATTR_MACRO_NAME: &str = "builder";
@@ -26,6 +28,93 @@ impl<'a> BuilderField<'a> {
             })
         }
         Ok(builder_fields)
+    }
+
+    pub fn generate_builder_setter(&self) -> proc_macro2::TokenStream {
+        let BuilderField {
+            ident,
+            ty,
+            iterative_name,
+        } = self;
+        let param_type = match get_option_sub_type(ty) {
+            Some(sub_ty) => sub_ty,
+            None => *ty,
+        };
+        match iterative_name {
+            Some(_) => quote! {},
+            None => quote! {
+                fn #ident (&mut self, #ident: #param_type) -> &mut Self {
+                    self.#ident = ::std::option::Option::Some(#ident);
+                    self
+                }
+            },
+        }
+    }
+
+    pub fn generate_builder_struct_field(&self) -> proc_macro2::TokenStream {
+        let BuilderField { ident, ty, .. } = self;
+        let new_ty = match get_option_sub_type(ty) {
+            Some(_) => quote! {#ty},
+            None => quote! {::std::option::Option<#ty>},
+        };
+        quote! {#ident: #new_ty}
+    }
+
+    pub fn generate_builder_default_field(&self) -> proc_macro2::TokenStream {
+        let BuilderField {
+            ident,
+            iterative_name,
+            ..
+        } = self;
+        let default_value = match iterative_name {
+            Some(_) => quote! {::std::option::Option::Some(vec![])},
+            None => quote! {::std::option::Option::None},
+        };
+        quote! {#ident: #default_value}
+    }
+
+    pub fn generate_builder_iterative_setter(&self) -> proc_macro2::TokenStream {
+        let BuilderField {
+            ident,
+            ty,
+            iterative_name,
+        } = self;
+        match iterative_name {
+            Some(iter_name) => {
+                let param_ident = Ident::new(iter_name, Span::call_site());
+                let param_type = get_vec_sub_type(ty);
+                match param_type {
+                    Some(param_type) => quote! {
+                        fn #param_ident (&mut self, #param_ident: #param_type) -> &mut Self {
+                            self.#ident.as_mut().unwrap().push(#param_ident);
+                            self
+                        }
+                    },
+                    None => quote! {},
+                }
+            }
+            None => quote! {},
+        }
+    }
+
+    pub fn generate_build_property_replace(&self) -> proc_macro2::TokenStream {
+        let BuilderField { ident, .. } = self;
+        quote! {let #ident = ::std::mem::replace(&mut self.#ident, ::std::option::Option::None)}
+    }
+
+    pub fn generate_prop_setter(&self) -> proc_macro2::TokenStream {
+        let BuilderField { ident, ty, .. } = self;
+        let error_msg = format!("Error: field '{}' haven't been set.", ident);
+        match get_option_sub_type(ty) {
+            Some(_) => quote! {#ident},
+            None => quote! {
+                #ident: match #ident {
+                    ::std::option::Option::Some(value) => value,
+                    ::std::option::Option::None => return ::std::result::Result::Err(
+                        ::std::boxed::Box::new(::std::io::Error::new(::std::io::ErrorKind::InvalidInput, #error_msg)))
+                }
+            },
+        }
     }
 }
 
@@ -90,4 +179,42 @@ fn extract_iterative_ident(field: &Field) -> Result<Option<String>, syn::Error> 
             _ => None,
         },
     )
+}
+
+fn get_single_element_template_sub_type<'a>(
+    ty: &'a Type,
+    main_type_name: &str,
+) -> Option<&'a Type> {
+    match ty {
+        Type::Path(TypePath {
+            path: Path {
+                segments,
+                leading_colon,
+            },
+            ..
+        }) if leading_colon.is_none()
+            && segments.len() == 1
+            && segments.iter().next().unwrap().ident == main_type_name =>
+        {
+            match &segments.iter().next().unwrap().arguments {
+                PathArguments::AngleBracketed(generic_args) if generic_args.args.len() == 1 => {
+                    let sub_arg = &generic_args.args.iter().next().unwrap();
+                    match sub_arg {
+                        GenericArgument::Type(sub_ty) => Some(sub_ty),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn get_option_sub_type(ty: &Type) -> Option<&Type> {
+    get_single_element_template_sub_type(ty, "Option")
+}
+
+fn get_vec_sub_type(ty: &Type) -> Option<&Type> {
+    get_single_element_template_sub_type(ty, "Vec")
 }

@@ -14,7 +14,10 @@ use builder_metadata::BuilderMetadata;
 
 fn extract_fields(input: &DeriveInput) -> Result<&Fields, syn::Error> {
     fn generate_error(span: Span) -> syn::Error {
-        syn::Error::new(span, "The 'Builder' macro only supports the 'struct' datatype")
+        syn::Error::new(
+            span,
+            "The 'Builder' macro only supports the 'struct' datatype",
+        )
     }
     match &input.data {
         Data::Struct(data) => Ok(&data.fields),
