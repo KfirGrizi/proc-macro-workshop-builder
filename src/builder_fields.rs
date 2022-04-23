@@ -63,7 +63,7 @@ fn extract_iterative_ident(field: &Field) -> Result<Option<String>, syn::Error> 
             },
             _ => None
         }
-    }).partition::<Vec<Result<&MetaNameValue, syn::Error>>, _>(Result::is_ok);//.collect::<Vec<Result<&MetaNameValue, syn::Error>>>();
+    }).partition::<Vec<Result<&MetaNameValue, syn::Error>>, _>(Result::is_ok);
     if errors.len() > 0 {
         return Err(errors.into_iter().next().unwrap().unwrap_err())
     }
