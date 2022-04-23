@@ -22,10 +22,7 @@ impl<'a> BuilderField<'a> {
             builder_fields.push(BuilderField {
                 ident: field.ident.as_ref().unwrap(),
                 ty: &field.ty,
-                iterative_name: match extract_iterative_ident(field) {
-                    Ok(iterative_name) => iterative_name,
-                    Err(error) => return Err(error),
-                },
+                iterative_name: extract_iterative_ident(field)?,
             })
         }
         Ok(builder_fields)
