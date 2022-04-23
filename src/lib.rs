@@ -2,6 +2,7 @@
 extern crate quote;
 
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 
 use syn::{self, parse_macro_input, Data, DeriveInput, Fields};
 
@@ -12,16 +13,13 @@ mod builder_metadata;
 use builder_metadata::BuilderMetadata;
 
 fn extract_fields(input: &DeriveInput) -> Result<&Fields, syn::Error> {
+    fn generate_error(span: Span) -> syn::Error {
+        syn::Error::new(span, "The 'Builder' macro only supports the 'struct' datatype")
+    }
     match &input.data {
         Data::Struct(data) => Ok(&data.fields),
-        enum_or_union => Err(syn::Error::new(
-            match enum_or_union {
-                Data::Enum(data) => data.enum_token.span,
-                Data::Union(data) => data.union_token.span,
-                _ => unreachable!(),
-            },
-            "The 'Builder' macro only supports the 'struct' datatype",
-        )),
+        Data::Enum(data) => Err(generate_error(data.enum_token.span)),
+        Data::Union(data) => Err(generate_error(data.union_token.span)),
     }
 }
 
