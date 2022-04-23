@@ -1,14 +1,3 @@
-// Generate methods on the builder for setting a value of each of the struct
-// fields.
-//
-//     impl CommandBuilder {
-//         fn executable(&mut self, executable: String) -> &mut Self {
-//             self.executable = Some(executable);
-//             self
-//         }
-//
-//         ...
-//     }
 
 use derive_builder::Builder;
 
